@@ -7,6 +7,9 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 from data import SweepDataset, SweepEvalDataset, imagenet_transform
 from model import NEJMbaseline
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
 def train_and_validate(train_csv, val_csv, epochs=100, batch_size=8, n_sweeps_val=8, save_path='best_model.pth'):
@@ -143,8 +146,8 @@ def train_and_validate(train_csv, val_csv, epochs=100, batch_size=8, n_sweeps_va
 
 if __name__ == "__main__":
     train_and_validate(
-        train_csv="/mnt/Data/hackathon/data_splits/final_train.csv",
-        val_csv='/mnt/Data/hackathon/data_splits/final_valid.csv',
+        train_csv="/mnt/Data/hackathon/final_train.csv",
+        val_csv='/mnt/Data/hackathon/final_valid.csv',
         epochs=50,
         batch_size=8,
         n_sweeps_val=8,

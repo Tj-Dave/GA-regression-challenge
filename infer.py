@@ -49,7 +49,7 @@ def infer_test(test_csv, model_path='best_model.pth', n_sweeps_test=8, output_cs
 
 if __name__ == "__main__":
     infer_test(
-        test_csv='/mnt/Data/hackathon/data_splits/final_test.csv',
+        test_csv='/mnt/Data/hackathon/final_test.csv',
         model_path="checkpoints/best_model.pth",
         n_sweeps_test=8,
         output_csv="outputs/test_predictions.csv"
