@@ -1,0 +1,166 @@
+# ============================
+# 🐍 Python / ML Project .gitignore
+# ============================
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment folders
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Conda environment files and directories
+*.conda
+*.yaml
+*.yml
+*.lock
+conda_env/
+conda/
+.conda/
+conda-meta/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_convert/
+*.ipynb_save/
+*.ipynb_temp/
+
+# VSCode settings
+.vscode/
+.history/
+.code-workspace
+
+# PyCharm / JetBrains
+.idea/
+*.iml
+
+# Logs & outputs
+logs/
+*.log
+*.out
+*.err
+nohup.out
+wandb/
+tensorboard/
+tb_logs/
+lightning_logs/
+mlruns/
+output/
+runs/
+results/
+checkpoints/
+experiments/
+
+# Model weights and large binaries
+*.pth
+*.pt
+*.pkl
+*.ckpt
+*.onnx
+*.tflite
+*.h5
+*.model
+*.joblib
+*.weights
+*.bin
+
+# Datasets and temporary data
+data/
+dataset/
+datasets/
+input/
+outputs/
+tmp/
+temp/
+*.npy
+*.npz
+*.csv~
+*.bak
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+
+# Environment variables and secrets
+.env
+.env.*
+.secrets/
+secrets.json
+config.json
+credentials/
+token.json
+apikey.txt
+
+# System / OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# Notebooks auto-saves / exports
+*.nbconvert.ipynb
+*.nb.html
+
+# Misc
+*.swp
+*.swo
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# Pytorch Lightning / Hugging Face / MLflow / Weights & Biases artifacts
+lightning_logs/
+wandb/
+mlruns/
+hf_cache/
+huggingface/
+cache/
+.cached/
+.checkpoints/
+outputs/
+artifacts/
+
+# Matplotlib, OpenCV, and plotting caches
+*.svg
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+plots/
+figures/
+visuals/
+
+# Backup configs and metadata
+*.bak
+*.backup
+*.old
+*.tmp
+*.cfg~
+config_backup/
+
+# Misc notebooks and debug files
+debug/
+debug.log
+__debug__/
+sandbox/
+scratch/
+playground/
+experiments/
+tryouts/
+
