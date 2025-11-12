@@ -76,6 +76,7 @@ conda activate ga-us
 pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
 pip install notebook pandas tensorboard
 conda install -c conda-forge nibabel
+pip install tqdm
 ```
 
 ### 4. Create project directories
