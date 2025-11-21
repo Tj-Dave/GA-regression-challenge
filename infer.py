@@ -25,6 +25,7 @@ def infer_test(test_csv, model_path='best_model.pth', n_sweeps_test=8, output_cs
 
     predictions = []
     study_ids = []
+    site = []
 
     with torch.no_grad():
         test_pbar = tqdm(test_loader, desc="Testing", leave=False)
@@ -39,9 +40,10 @@ def infer_test(test_csv, model_path='best_model.pth', n_sweeps_test=8, output_cs
             start_idx = i * test_loader.batch_size
             end_idx = min(start_idx + B, len(test_df))
             study_ids.extend(test_df.iloc[start_idx:end_idx]['study_id'].tolist())
+            site.extend(test_df.iloc[start_idx:end_idx]['site'].tolist())
 
     # Save predictions to CSV
-    result_df = pd.DataFrame({'study_id': study_ids, 'ga': predictions})
+    result_df = pd.DataFrame({'study_id': study_ids, 'site': site, 'predicted_ga': predictions})
     result_df.to_csv(output_csv, index=False)
     print(f"✅ Saved predictions to {output_csv}")
 
