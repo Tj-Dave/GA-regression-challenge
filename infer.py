@@ -3,57 +3,84 @@ import pandas as pd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from data import SweepEvalDataset, imagenet_transform
-from model import NEJMbaseline
+from model import HierarchicalGA
 
-def infer_test(test_csv, model_path='best_model.pth', n_sweeps_test=8, output_csv='test_predictions.csv'):
-    """
-    Run inference on test set using a trained NEJMbaseline model.
-    """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Load model checkpoint
-    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-    model = checkpoint['model_architecture']
+def load_model(checkpoint_path, device):
+    """
+    Load HierarchicalGA model for inference.
+    """
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    model = HierarchicalGA(
+        backbone_type='convnext_tiny',
+        feature_dim=768,
+        reduced_dim=128,
+        num_heads=4,
+        fine_tune_backbone=False,  # freeze backbone at inference
+        pretrained=False           # weights come from checkpoint
+    ).to(device)
+
     model.load_state_dict(checkpoint['model_state_dict'])
-    model.to(device)
     model.eval()
+    return model
 
-    # Prepare test data
-    test_df = pd.read_csv(test_csv)
-    test_dataset = SweepEvalDataset(test_csv, n_sweeps=n_sweeps_test, transform=imagenet_transform)
-    test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=4)
 
-    predictions = []
-    study_ids = []
-    site = []
+def run_inference(csv_path,
+                  checkpoint_path,
+                  output_csv="test_predictions.csv",
+                  n_sweeps=None,
+                  batch_size=4):
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    print(f"Loading model from {checkpoint_path}")
+    model = load_model(checkpoint_path, device)
+
+    print("Preparing dataset...")
+    dataset = SweepEvalDataset(
+        csv_path,
+        n_sweeps=n_sweeps,     # use all sweeps unless specified
+        transform=imagenet_transform
+    )
+
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True
+    )
+
+    all_preds = []
+    all_labels = []
+    all_ids = []
+
+    print("Running inference...")
     with torch.no_grad():
-        test_pbar = tqdm(test_loader, desc="Testing", leave=False)
-        for i, (sweeps, _) in enumerate(test_pbar):
-            sweeps = sweeps.to(device)
-            B, S, T, C, H, W = sweeps.shape
-            sweeps = sweeps.view(B, S*T, C, H, W)
-            outputs, _ = model(sweeps)
+        for sweeps, labels in tqdm(loader):
+            sweeps = sweeps.to(device)              # (B, S, T, C, H, W)
+            outputs, _ = model(sweeps)              # predictions
             preds = outputs.squeeze(1).cpu().numpy()
-            predictions.extend(preds)
 
-            start_idx = i * test_loader.batch_size
-            end_idx = min(start_idx + B, len(test_df))
-            study_ids.extend(test_df.iloc[start_idx:end_idx]['study_id'].tolist())
-            site.extend(test_df.iloc[start_idx:end_idx]['site'].tolist())
+            all_preds.extend(preds)
+            all_labels.extend(labels.numpy())
 
-    # Save predictions to CSV
-    result_df = pd.DataFrame({'study_id': study_ids, 'site': site, 'predicted_ga': predictions})
-    result_df.to_csv(output_csv, index=False)
-    print(f"✅ Saved predictions to {output_csv}")
+    df = pd.read_csv(csv_path)
+    df["pred_ga"] = all_preds
+    df["true_ga"] = all_labels
 
+    df.to_csv(output_csv, index=False)
+    print(f"\nInference complete! Results saved to: {output_csv}")
+
+    return output_csv
 
 
 if __name__ == "__main__":
-    infer_test(
-        test_csv='/mnt/Data/hackathon/final_test.csv',
-        model_path="checkpoints/best_model.pth",
-        n_sweeps_test=8,
-        output_csv="outputs/test_predictions.csv"
+    run_inference(
+        csv_path="/mnt/Data/hackathon/final_test.csv",
+        checkpoint_path="checkpoints/hierarchical_best_model.pth",
+        output_csv="test_predictions.csv",
+        n_sweeps=None,
+        batch_size=4
     )
-
