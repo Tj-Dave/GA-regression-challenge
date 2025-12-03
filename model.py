@@ -1,229 +1,28 @@
-# model.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 
-# convnext import (torchvision)
+# Try to import ConvNeXt (available in torchvision >= 0.13)
 try:
-    # torchvision > 0.13 style
     from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
-except Exception:
+    CONVNEXT_AVAILABLE = True
+except ImportError:
+    CONVNEXT_AVAILABLE = False
     convnext_tiny = None
     ConvNeXt_Tiny_Weights = None
 
 
-# ----------------------------
-# Intra-Sweep Multi-Head Attention (vectorized)
-# ----------------------------
-class IntraSweepAttention(nn.Module):
-    """
-    Multi-head attention summarizing frames within each sweep.
-    Input: (B, S, T, D)
-    Output:
-        sweep_embeddings: (B, S, reduced_dim)
-        frame_attentions: (B, S, T)
-    Implementation details:
-        - Vectorizes across B and S by merging them into one batch dimension when calling nn.MultiheadAttention.
-    """
-    def __init__(self, feature_dim=512, reduced_dim=128, num_heads=4, dropout=0.1):
-        super().__init__()
-        self.feature_dim = feature_dim
-        self.reduced_dim = reduced_dim
-        self.num_heads = num_heads
+# ============================================================================
+# ATTENTION MODULES
+# ============================================================================
 
-        # Multi-head attention (expects (batch, seq, embed_dim) when batch_first=True)
-        self.mha = nn.MultiheadAttention(embed_dim=feature_dim, num_heads=num_heads, batch_first=True, dropout=dropout)
-
-        # Simple feedforward after attention to reduce to reduced_dim
-        self.ffn = nn.Sequential(
-            nn.Linear(feature_dim, feature_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(feature_dim, reduced_dim)
-        )
-
-        # Normalization layers
-        self.norm_attn = nn.LayerNorm(feature_dim)
-        self.norm_ffn = nn.LayerNorm(reduced_dim)
-
-        # Learnable query vector used to summarize the sequence of frames per sweep
-        # Shape: (1, 1, feature_dim) so it can be repeated for batch
-        self.query = nn.Parameter(torch.randn(1, 1, feature_dim))
-
-    def forward(self, features):
-        """
-        Args:
-            features: (B, S, T, D)  -- D == feature_dim
-        Returns:
-            sweep_embeddings: (B, S, reduced_dim)
-            frame_attentions: (B, S, T)
-        """
-        B, S, T, D = features.shape
-        assert D == self.feature_dim, f"Expected feature_dim={self.feature_dim}, got {D}"
-
-        # Merge B and S for efficient parallel processing
-        merged = features.view(B * S, T, D)             # (B*S, T, D)
-
-        # Create query repeated for (B*S)
-        q = self.query.repeat(B * S, 1, 1)              # (B*S, 1, D)
-
-        # Multi-head attention: query, key, value
-        # attn_out: (B*S, 1, D), attn_weights: (B*S, 1, T)
-        attn_out, attn_weights = self.mha(q, merged, merged)  
-
-        # Squeeze and normalize
-        attn_out = attn_out.squeeze(1)                  # (B*S, D)
-        attn_out = self.norm_attn(attn_out)             # (B*S, D)
-
-        # Feed-forward to reduced_dim
-        sweep_emb = self.ffn(attn_out)                  # (B*S, reduced_dim)
-        sweep_emb = self.norm_ffn(sweep_emb)            # (B*S, reduced_dim)
-
-        # Reshape back to (B, S, reduced_dim)
-        sweep_embeddings = sweep_emb.view(B, S, self.reduced_dim)
-
-        # attn_weights -> (B*S, T) -> reshape to (B, S, T)
-        frame_attentions = attn_weights.squeeze(1).view(B, S, T)
-
-        return sweep_embeddings, frame_attentions
-
-
-# ----------------------------
-# MLP Regression Head
-# ----------------------------
-class MLPRegressionHead(nn.Module):
-    """
-    Simple MLP head for regression.
-    Input: (B, D_in) -> Output: (B, 1)
-    """
-    def __init__(self, input_dim=128, hidden_dims=(256, 128), dropout=0.2):
-        super().__init__()
-        layers = []
-        prev = input_dim
-        for h in hidden_dims:
-            layers.append(nn.Linear(prev, h))
-            layers.append(nn.GELU())
-            layers.append(nn.Dropout(dropout))
-            # Use LayerNorm to be stable across small batches (preferred for representation embeddings)
-            layers.append(nn.LayerNorm(h))
-            prev = h
-        layers.append(nn.Linear(prev, 1))
-        self.mlp = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.mlp(x)
-
-
-# ----------------------------
-# Hierarchical (Intra-Sweep) GA Model (Optimized)
-# ----------------------------
-class HierarchicalGA(nn.Module):
-    """
-    Hierarchical model using per-frame backbone -> intra-sweep attention -> sweep aggregation -> regression.
-
-    Expected input shape for forward:
-        x: (B, S, T, C, H, W)
-    Returns:
-        output: (B, 1)
-        optionally attention dict with:
-            'frame_attention': (B, S, T)
-            'sweep_embeddings': (B, S, reduced_dim)
-    """
-    def __init__(self,
-                 backbone_type='convnext_tiny',
-                 feature_dim=None,
-                 reduced_dim=128,
-                 num_heads=4,
-                 fine_tune_backbone=True,
-                 pretrained=True):
-        super().__init__()
-
-        # Build backbone
-        if backbone_type == 'convnext_tiny':
-            if convnext_tiny is None:
-                raise RuntimeError("convnext_tiny not available in this torchvision version.")
-            backbone = convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None)
-            # Create a feature extractor that outputs a flat vector per image: (B, 768)
-            self.feature_extractor = nn.Sequential(
-                backbone.features,
-                backbone.avgpool,
-                nn.Flatten(1)
-            )
-            resolved_feature_dim = 768
-        elif backbone_type == 'resnet18':
-            resnet = models.resnet18(pretrained=pretrained)
-            # Keep everything up to avgpool, then flatten
-            self.feature_extractor = nn.Sequential(
-                *list(resnet.children())[:-1],  # includes avgpool
-                nn.Flatten(1)
-            )
-            resolved_feature_dim = 512
-        else:
-            raise ValueError(f"Unsupported backbone_type: {backbone_type}")
-
-        # Allow caller to override feature_dim if needed
-        self.feature_dim = feature_dim or resolved_feature_dim
-
-        # Freeze backbone if requested
-        if not fine_tune_backbone:
-            for p in self.feature_extractor.parameters():
-                p.requires_grad = False
-
-        # Intra-sweep attention (vectorized)
-        self.intra_attn = IntraSweepAttention(
-            feature_dim=self.feature_dim,
-            reduced_dim=reduced_dim,
-            num_heads=num_heads
-        )
-
-        # Regression head
-        self.reg_head = MLPRegressionHead(input_dim=reduced_dim, hidden_dims=(256, 128), dropout=0.2)
-
-    def forward(self, x, return_attention=False):
-        """
-        x: (B, S, T, C, H, W)
-        """
-        if x.ndim != 6:
-            raise ValueError(f"Expected input of shape (B,S,T,C,H,W), got {x.shape}")
-
-        B, S, T, C, H, W = x.shape
-
-        # Flatten frames for backbone: (B*S*T, C, H, W)
-        frames = x.view(B * S * T, C, H, W)
-
-        # Extract per-frame features: (B*S*T, feature_dim)
-        feat_flat = self.feature_extractor(frames)
-        feat_flat = feat_flat.view(B * S * T, -1)  # ensure shape
-
-        # Reshape back to (B, S, T, D)
-        features = feat_flat.view(B, S, T, -1)
-
-        # Intra-sweep attention: vectorized
-        sweep_embeddings, frame_attention = self.intra_attn(features)  # (B, S, reduced_dim), (B, S, T)
-
-        # Simple inter-sweep aggregation: mean (fast, stable)
-        # (You can replace this mean with a learned aggregator or attention later)
-        study_embedding = sweep_embeddings.mean(dim=1)  # (B, reduced_dim)
-
-        # Regression
-        output = self.reg_head(study_embedding)  # (B, 1)
-
-        if return_attention:
-            attn_dict = {
-                'frame_attention': frame_attention,   # (B, S, T)
-                'sweep_embeddings': sweep_embeddings  # (B, S, reduced_dim)
-            }
-            return output, attn_dict
-
-        return output, None
-
-
-# ----------------------------
-# Legacy/compatibility classes (optional)
-# ----------------------------
 class WeightedAverageAttention(nn.Module):
-    """Original single-head attention kept for backward compatibility."""
+    """
+    Original attention: Flattens all frames, applies single attention.
+    Input: (B, T, D) where T = total frames (S*T if multiple sweeps)
+    Output: (B, D')
+    """
     def __init__(self, feature_dim=512, reduced_dim=128):
         super().__init__()
         self.W = nn.Linear(feature_dim, 64)
@@ -231,33 +30,485 @@ class WeightedAverageAttention(nn.Module):
         self.Q = nn.Linear(feature_dim, reduced_dim)
 
     def forward(self, features):
-        attn_scores = self.V(torch.tanh(self.W(features)))
-        attn_weights = F.softmax(attn_scores, dim=1)
-        reduced_features = self.Q(features)
+        attn_scores = self.V(torch.tanh(self.W(features)))  # (B,T,1)
+        attn_weights = F.softmax(attn_scores, dim=1)        # (B,T,1)
+        reduced_features = self.Q(features)                 # (B,T,reduced_dim)
         weighted_sum = torch.sum(attn_weights * reduced_features, dim=1)
         return weighted_sum, attn_weights.squeeze(-1)
 
 
-class NEJMbaseline(nn.Module):
-    """Original ResNet18-based baseline kept for compatibility."""
-    def __init__(self, reduced_dim=128, fine_tune_backbone=True, pretrained=True):
+class IntraSweepAttention(nn.Module):
+    """
+    Intra-sweep attention: Processes frames within each sweep separately.
+    Input: (B, S, T, D) where S = sweeps, T = frames per sweep
+    Output: (B, S, D') - per-sweep embeddings
+    """
+    def __init__(self, feature_dim=512, reduced_dim=128, num_heads=4, dropout=0.1):
         super().__init__()
-        resnet = models.resnet18(pretrained=pretrained)
-        self.feature_extractor = nn.Sequential(*list(resnet.children())[:-1], nn.Flatten(1))
-        self.feature_dim = 512
+        self.feature_dim = feature_dim
+        self.reduced_dim = reduced_dim
+        self.num_heads = num_heads
+        
+        # Multi-head attention for intra-sweep processing
+        self.mha = nn.MultiheadAttention(
+            embed_dim=feature_dim,
+            num_heads=num_heads,
+            batch_first=True,
+            dropout=dropout
+        )
+        
+        # Learnable query for summarizing each sweep
+        self.query = nn.Parameter(torch.randn(1, 1, feature_dim))
+        
+        # Projection to reduced dimension
+        self.projection = nn.Sequential(
+            nn.Linear(feature_dim, reduced_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.LayerNorm(reduced_dim)
+        )
+        
+    def forward(self, features):
+        """
+        Args:
+            features: (B, S, T, D) - batch, sweeps, frames, features
+        Returns:
+            sweep_embeddings: (B, S, D') - per-sweep embeddings
+            frame_attention: (B, S, T) - attention weights per frame
+        """
+        B, S, T, D = features.shape
+        
+        # Reshape for batch processing: (B, S, T, D) -> (B*S, T, D)
+        features_flat = features.view(B * S, T, D)
+        
+        # Create query: (B*S, 1, D)
+        query = self.query.repeat(B * S, 1, 1)
+        
+        # Multi-head attention: summarize each sweep
+        attended, attn_weights = self.mha(query, features_flat, features_flat)
+        # attended: (B*S, 1, D), attn_weights: (B*S, 1, T)
+        
+        # Squeeze and project
+        attended = attended.squeeze(1)  # (B*S, D)
+        sweep_embeddings = self.projection(attended)  # (B*S, D')
+        
+        # Reshape back
+        sweep_embeddings = sweep_embeddings.view(B, S, self.reduced_dim)  # (B, S, D')
+        frame_attention = attn_weights.squeeze(1).view(B, S, T)  # (B, S, T)
+        
+        return sweep_embeddings, frame_attention
 
+
+# ============================================================================
+# REGRESSION HEADS
+# ============================================================================
+
+class SimpleRegressionHead(nn.Module):
+    """Simple linear regression head (original)"""
+    def __init__(self, input_dim=128):
+        super().__init__()
+        self.fc = nn.Linear(input_dim, 1)
+    
+    def forward(self, x):
+        return self.fc(x)
+
+
+class MLPRegressionHead(nn.Module):
+    """MLP regression head with GELU and dropout"""
+    def __init__(self, input_dim=128, hidden_dims=[256, 128], dropout=0.2):
+        super().__init__()
+        layers = []
+        prev_dim = input_dim
+        
+        for hidden_dim in hidden_dims:
+            layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.LayerNorm(hidden_dim)
+            ])
+            prev_dim = hidden_dim
+        
+        layers.append(nn.Linear(prev_dim, 1))
+        self.mlp = nn.Sequential(*layers)
+        
+    def forward(self, x):
+        return self.mlp(x)
+
+
+# ============================================================================
+# BASE MODEL CLASSES
+# ============================================================================
+
+class BaseFlatModel(nn.Module):
+    """
+    Base class for FLAT models (original architecture).
+    Flattens all frames, applies single attention.
+    """
+    def __init__(self, feature_extractor, feature_dim, reduced_dim=128, 
+                 fine_tune_backbone=True, use_mlp_head=False):
+        super().__init__()
+        self.feature_extractor = feature_extractor
+        self.feature_dim = feature_dim
+        
+        # Optionally freeze backbone
         if not fine_tune_backbone:
             for param in self.feature_extractor.parameters():
                 param.requires_grad = False
-
-        self.attention = WeightedAverageAttention(feature_dim=self.feature_dim, reduced_dim=reduced_dim)
-        self.fc = nn.Linear(reduced_dim, 1)
-
+        
+        # Attention module
+        self.attention = WeightedAverageAttention(
+            feature_dim=feature_dim, 
+            reduced_dim=reduced_dim
+        )
+        
+        # Regression head
+        if use_mlp_head:
+            self.reg_head = MLPRegressionHead(input_dim=reduced_dim)
+        else:
+            self.reg_head = SimpleRegressionHead(input_dim=reduced_dim)
+    
     def forward(self, x):
-        B, T, C, H, W = x.shape
-        x = x.view(B * T, C, H, W)
+        """
+        Args:
+            x: Tensor of shape (B, T, C, H, W) OR (B, S, T, C, H, W)
+        Returns:
+            output: Predicted GA (B, 1)
+            attn_weights: Attention weights (B, T) or (B, S*T)
+        """
+        # Handle both single-sweep (B, T, C, H, W) and multi-sweep (B, S, T, C, H, W)
+        if x.dim() == 5:
+            # Single sweep: (B, T, C, H, W)
+            B, T, C, H, W = x.shape
+            x = x.view(B * T, C, H, W)
+        elif x.dim() == 6:
+            # Multi-sweep: (B, S, T, C, H, W) -> flatten sweeps
+            B, S, T, C, H, W = x.shape
+            x = x.view(B * S * T, C, H, W)
+            T = S * T  # Update total frames
+        else:
+            raise ValueError(f"Unexpected input shape: {x.shape}")
+        
+        # Extract features
         features = self.feature_extractor(x)
-        features = features.view(B, T, self.feature_dim)
+        
+        # Reshape features to (B, T, D)
+        if features.dim() == 4:  # (B*T, D, 1, 1) for ResNet
+            features = features.view(B, T, self.feature_dim)
+        elif features.dim() == 2:  # (B*T, D) for ConvNeXt
+            features = features.view(B, T, self.feature_dim)
+        else:
+            features = features.view(B, T, -1)
+        
+        # Apply attention
         aggregated, attn_weights = self.attention(features)
-        output = self.fc(aggregated)
+        
+        # Regression
+        output = self.reg_head(aggregated)
+        
         return output, attn_weights
+
+
+class BaseHierarchicalModel(nn.Module):
+    """
+    Base class for HIERARCHICAL models (new architecture).
+    Processes sweeps separately with intra-sweep attention.
+    """
+    def __init__(self, feature_extractor, feature_dim, reduced_dim=128,
+                 num_heads=4, fine_tune_backbone=True, use_mlp_head=True):
+        super().__init__()
+        self.feature_extractor = feature_extractor
+        self.feature_dim = feature_dim
+        
+        # Optionally freeze backbone
+        if not fine_tune_backbone:
+            for param in self.feature_extractor.parameters():
+                param.requires_grad = False
+        
+        # Intra-sweep attention
+        self.intra_sweep_attention = IntraSweepAttention(
+            feature_dim=feature_dim,
+            reduced_dim=reduced_dim,
+            num_heads=num_heads
+        )
+        
+        # Simple sweep aggregator (mean)
+        self.sweep_aggregator = lambda x: x.mean(dim=1)
+        
+        # Regression head
+        if use_mlp_head:
+            self.reg_head = MLPRegressionHead(input_dim=reduced_dim)
+        else:
+            self.reg_head = SimpleRegressionHead(input_dim=reduced_dim)
+    
+    def forward(self, x, return_attention=False):
+        """
+        Args:
+            x: Tensor of shape (B, S, T, C, H, W) - MUST be multi-sweep!
+            return_attention: If True, return attention dictionary
+        Returns:
+            output: Predicted GA (B, 1)
+            attention_info: Either attn_weights or dict with detailed info
+        """
+        B, S, T, C, H, W = x.shape
+        
+        # Extract features: (B, S, T, C, H, W) -> (B*S*T, C, H, W)
+        x_flat = x.view(B * S * T, C, H, W)
+        features_flat = self.feature_extractor(x_flat)
+        
+        # Reshape to (B, S, T, D)
+        if features_flat.dim() == 4:  # (B*S*T, D, 1, 1) for ResNet
+            features_flat = features_flat.view(B * S * T, -1)
+        features = features_flat.view(B, S, T, self.feature_dim)
+        
+        # Intra-sweep attention
+        sweep_embeddings, frame_attention = self.intra_sweep_attention(features)
+        # sweep_embeddings: (B, S, D'), frame_attention: (B, S, T)
+        
+        # Aggregate sweeps
+        study_embedding = self.sweep_aggregator(sweep_embeddings)  # (B, D')
+        
+        # Regression
+        output = self.reg_head(study_embedding)  # (B, 1)
+        
+        if return_attention:
+            attention_dict = {
+                'frame_attention': frame_attention,  # (B, S, T)
+                'sweep_embeddings': sweep_embeddings,  # (B, S, D')
+                'study_embedding': study_embedding  # (B, D')
+            }
+            return output, attention_dict
+        
+        return output, frame_attention
+
+
+# ============================================================================
+# CONCRETE MODEL CLASSES - FLAT (ORIGINAL)
+# ============================================================================
+
+class NEJMbaselineFlat(BaseFlatModel):
+    """ResNet18 with flat attention (original baseline)"""
+    def __init__(self, reduced_dim=128, fine_tune_backbone=True, 
+                 pretrained=True, use_mlp_head=False):
+        resnet = models.resnet18(
+            weights=models.ResNet18_Weights.DEFAULT if pretrained else None
+        )
+        feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
+        feature_dim = 512
+        
+        super().__init__(feature_extractor, feature_dim, reduced_dim, 
+                        fine_tune_backbone, use_mlp_head)
+
+
+class ResNet50Flat(BaseFlatModel):
+    """ResNet50 with flat attention"""
+    def __init__(self, reduced_dim=128, fine_tune_backbone=True,
+                 pretrained=True, use_mlp_head=False):
+        resnet = models.resnet50(
+            weights=models.ResNet50_Weights.DEFAULT if pretrained else None
+        )
+        feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
+        feature_dim = 2048
+        
+        super().__init__(feature_extractor, feature_dim, reduced_dim,
+                        fine_tune_backbone, use_mlp_head)
+
+
+class ConvNeXtTinyFlat(BaseFlatModel):
+    """ConvNeXt-Tiny with flat attention"""
+    def __init__(self, reduced_dim=128, fine_tune_backbone=True,
+                 pretrained=True, use_mlp_head=False):
+        if not CONVNEXT_AVAILABLE:
+            raise ImportError("ConvNeXt requires torchvision >= 0.13")
+        
+        convnext = convnext_tiny(
+            weights=ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None
+        )
+        
+        feature_extractor = nn.Sequential(
+            convnext.features,
+            convnext.avgpool,
+            nn.Flatten(1)
+        )
+        feature_dim = 768
+        
+        super().__init__(feature_extractor, feature_dim, reduced_dim,
+                        fine_tune_backbone, use_mlp_head)
+
+
+# ============================================================================
+# CONCRETE MODEL CLASSES - HIERARCHICAL (NEW)
+# ============================================================================
+
+class NEJMbaselineHierarchical(BaseHierarchicalModel):
+    """ResNet18 with intra-sweep attention"""
+    def __init__(self, reduced_dim=128, num_heads=4, fine_tune_backbone=True,
+                 pretrained=True, use_mlp_head=True):
+        resnet = models.resnet18(
+            weights=models.ResNet18_Weights.DEFAULT if pretrained else None
+        )
+        feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
+        feature_dim = 512
+        
+        super().__init__(feature_extractor, feature_dim, reduced_dim,
+                        num_heads, fine_tune_backbone, use_mlp_head)
+
+
+class ResNet50Hierarchical(BaseHierarchicalModel):
+    """ResNet50 with intra-sweep attention"""
+    def __init__(self, reduced_dim=128, num_heads=4, fine_tune_backbone=True,
+                 pretrained=True, use_mlp_head=True):
+        resnet = models.resnet50(
+            weights=models.ResNet50_Weights.DEFAULT if pretrained else None
+        )
+        feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
+        feature_dim = 2048
+        
+        super().__init__(feature_extractor, feature_dim, reduced_dim,
+                        num_heads, fine_tune_backbone, use_mlp_head)
+
+
+class ConvNeXtTinyHierarchical(BaseHierarchicalModel):
+    """ConvNeXt-Tiny with intra-sweep attention"""
+    def __init__(self, reduced_dim=128, num_heads=4, fine_tune_backbone=True,
+                 pretrained=True, use_mlp_head=True):
+        if not CONVNEXT_AVAILABLE:
+            raise ImportError("ConvNeXt requires torchvision >= 0.13")
+        
+        convnext = convnext_tiny(
+            weights=ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None
+        )
+        
+        feature_extractor = nn.Sequential(
+            convnext.features,
+            convnext.avgpool,
+            nn.Flatten(1)
+        )
+        feature_dim = 768
+        
+        super().__init__(feature_extractor, feature_dim, reduced_dim,
+                        num_heads, fine_tune_backbone, use_mlp_head)
+
+
+# ============================================================================
+# MODEL FACTORY FUNCTIONS
+# ============================================================================
+
+def create_flat_model(model_type='resnet18', **kwargs):
+    """Create flat attention model"""
+    flat_registry = {
+        'resnet18': NEJMbaselineFlat,
+        'resnet50': ResNet50Flat,
+        'convnext_tiny': ConvNeXtTinyFlat,
+    }
+    
+    if model_type not in flat_registry:
+        raise ValueError(f"Unknown flat model type: {model_type}")
+    
+    return flat_registry[model_type](**kwargs)
+
+
+def create_hierarchical_model(model_type='resnet18', **kwargs):
+    """Create hierarchical model with intra-sweep attention"""
+    hierarchical_registry = {
+        'resnet18': NEJMbaselineHierarchical,
+        'resnet50': ResNet50Hierarchical,
+        'convnext_tiny': ConvNeXtTinyHierarchical,
+    }
+    
+    if model_type not in hierarchical_registry:
+        raise ValueError(f"Unknown hierarchical model type: {model_type}")
+    
+    return hierarchical_registry[model_type](**kwargs)
+
+
+def create_model(model_type='resnet18', architecture='flat', **kwargs):
+    """
+    General factory function to create any model.
+    
+    Args:
+        model_type: 'resnet18', 'resnet50', or 'convnext_tiny'
+        architecture: 'flat' (original) or 'hierarchical' (intra-sweep)
+        **kwargs: Model-specific parameters
+    
+    Example:
+        # Original flat models
+        model = create_model('resnet18', architecture='flat')
+        model = create_model('resnet50', architecture='flat', reduced_dim=256)
+        
+        # New hierarchical models
+        model = create_model('resnet18', architecture='hierarchical')
+        model = create_model('convnext_tiny', architecture='hierarchical', num_heads=8)
+    """
+    if architecture == 'flat':
+        return create_flat_model(model_type, **kwargs)
+    elif architecture == 'hierarchical':
+        return create_hierarchical_model(model_type, **kwargs)
+    else:
+        raise ValueError(f"Unknown architecture: {architecture}. Use 'flat' or 'hierarchical'")
+
+
+# ============================================================================
+# TEST FUNCTIONS
+# ============================================================================
+
+def test_all_models():
+    """Test all model configurations"""
+    batch_size = 2
+    sweeps = 2
+    frames = 16
+    channels = 3
+    height = width = 224
+    
+    print("Testing models...")
+    
+    # Test configurations
+    test_cases = [
+        ('resnet18', 'flat'),
+        ('resnet50', 'flat'),
+        ('convnext_tiny', 'flat'),
+        ('resnet18', 'hierarchical'),
+        ('resnet50', 'hierarchical'),
+        ('convnext_tiny', 'hierarchical'),
+    ]
+    
+    for model_type, architecture in test_cases:
+        try:
+            print(f"\nTesting {architecture}_{model_type}...")
+            
+            # Create model
+            if architecture == 'flat':
+                model = create_flat_model(model_type, pretrained=False)
+                # Test with single sweep input (B, T, C, H, W)
+                x = torch.randn(batch_size, frames, channels, height, width)
+                output, attn = model(x)
+                print(f"  Single-sweep input: {x.shape} -> output: {output.shape}, attn: {attn.shape}")
+                
+                # Test with multi-sweep input (B, S, T, C, H, W)
+                x_multi = torch.randn(batch_size, sweeps, frames, channels, height, width)
+                output_multi, attn_multi = model(x_multi)
+                print(f"  Multi-sweep input: {x_multi.shape} -> output: {output_multi.shape}, attn: {attn_multi.shape}")
+                
+            else:  # hierarchical
+                model = create_hierarchical_model(model_type, pretrained=False)
+                # Hierarchical models only accept multi-sweep input
+                x = torch.randn(batch_size, sweeps, frames, channels, height, width)
+                output, attn = model(x)
+                print(f"  Multi-sweep input: {x.shape} -> output: {output.shape}")
+                
+                if isinstance(attn, dict):
+                    print(f"  Attention dict keys: {list(attn.keys())}")
+                    for k, v in attn.items():
+                        print(f"    {k}: {v.shape}")
+                else:
+                    print(f"  Attention shape: {attn.shape}")
+            
+            print(f"  ✅ {architecture}_{model_type} works!")
+            
+        except Exception as e:
+            print(f"  ❌ {architecture}_{model_type} failed: {e}")
+
+
+if __name__ == "__main__":
+    # Run tests
+    test_all_models()

@@ -125,6 +125,10 @@ class SweepEvalDataset(Dataset):
             all_sweeps.append(frames)
 
         all_sweeps = torch.stack(all_sweeps, dim=0)  # (num_sweeps, T, C, H, W)
-        label = torch.tensor(row['ga'], dtype=torch.float32)
+        # label = torch.tensor(row['ga'], dtype=torch.float32)
+        if 'ga' in row.index:
+            label = torch.tensor(row['ga'], dtype=torch.float32)
+        else:
+            label = torch.tensor(0.0, dtype=torch.float32)
         return all_sweeps, label
 

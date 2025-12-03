@@ -18,7 +18,6 @@ from model import create_model  # Using the factory function
 
 def train_model(
     model_type='resnet18',
-    architecture='flat',  # NEW: 'flat' or 'hierarchical'
     train_csv="/mnt/Data/hackathon/final_train.csv",
     val_csv="/mnt/Data/hackathon/final_valid.csv",
     epochs=100,
@@ -26,18 +25,15 @@ def train_model(
     n_sweeps_val=8,
     learning_rate=1e-4,
     reduced_dim=128,
-    num_heads=4,  # NEW: for hierarchical models
-    train_sweeps=1,  # NEW: 1 for flat, 2+ for hierarchical
     fine_tune_backbone=True,
     pretrained=True,
     save_dir="checkpoints"
 ):
     """
-    Train GA prediction models.
+    Train any GA prediction model with single-sweep training and multi-sweep validation.
     
     Args:
         model_type: 'resnet18', 'resnet50', or 'convnext_tiny'
-        architecture: 'flat' (original) or 'hierarchical' (intra-sweep)  # NEW
         train_csv: Path to training CSV
         val_csv: Path to validation CSV
         epochs: Number of training epochs
@@ -45,20 +41,17 @@ def train_model(
         n_sweeps_val: Number of sweeps to use during validation
         learning_rate: Initial learning rate
         reduced_dim: Dimension for attention reduced features
-        num_heads: Number of attention heads (for hierarchical)  # NEW
-        train_sweeps: Number of sweeps per study during training  # NEW
         fine_tune_backbone: Whether to fine-tune the backbone
         pretrained: Use pretrained weights
         save_dir: Directory to save checkpoints
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
-    print(f"Training {architecture}_{model_type} model...")
-    print(f"Training with {train_sweeps} sweep(s) per study")
+    print(f"Training {model_type} model...")
     
     # Create timestamp for unique experiment name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_name = f"{architecture}_{model_type}_{timestamp}"
+    experiment_name = f"{model_type}_{timestamp}"
     
     # Create directories
     log_dir = os.path.join("logs", experiment_name)
@@ -68,25 +61,9 @@ def train_model(
     # Create TensorBoard writer
     writer = SummaryWriter(log_dir=log_dir)
     
-    # ==================== DATASETS ====================
+    # Datasets and loaders
     print("Loading datasets...")
-    
-    # Training dataset
-    if architecture == 'flat':
-        # Flat models: single sweep training (original)
-        train_dataset = SweepDataset(train_csv, transform=imagenet_transform)
-    else:  # hierarchical
-        # Hierarchical models: need multi-sweep dataset
-        # We need to modify SweepDataset or create a new one
-        # For now, we'll create a simple wrapper
-        from data_old import SweepEvalDataset  # This gives multi-sweep
-        train_dataset = SweepEvalDataset(
-            train_csv, 
-            n_sweeps=train_sweeps,  # Use 2 sweeps for hierarchical training
-            transform=imagenet_transform
-        )
-    
-    # Validation dataset (always multi-sweep)
+    train_dataset = SweepDataset(train_csv, transform=imagenet_transform)
     val_dataset = SweepEvalDataset(val_csv, n_sweeps=n_sweeps_val, transform=imagenet_transform)
     
     train_loader = DataLoader(
@@ -109,24 +86,14 @@ def train_model(
     print(f"Train batches: {len(train_loader)}")
     print(f"Val batches: {len(val_loader)}")
     
-    # ==================== MODEL ====================
-    print(f"Creating {architecture}_{model_type} model...")
-    
-    # Prepare kwargs for model creation
-    model_kwargs = {
-        'model_type': model_type,
-        'architecture': architecture,  # NEW
-        'reduced_dim': reduced_dim,
-        'fine_tune_backbone': fine_tune_backbone,
-        'pretrained': pretrained,
-    }
-    
-    # Add architecture-specific parameters
-    if architecture == 'hierarchical':
-        model_kwargs['num_heads'] = num_heads
-        model_kwargs['use_mlp_head'] = True  # Use MLP head for hierarchical
-    
-    model = create_model(**model_kwargs).to(device)
+    # Create model
+    print(f"Creating {model_type} model...")
+    model = create_model(
+        model_type=model_type,
+        reduced_dim=reduced_dim,
+        fine_tune_backbone=fine_tune_backbone,
+        pretrained=pretrained
+    ).to(device)
     
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -134,7 +101,7 @@ def train_model(
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
     
-    # ==================== TRAINING SETUP ====================
+    # Loss, optimizer, scheduler
     criterion = nn.L1Loss()  # MAE loss
     optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=10, factor=0.5)
@@ -142,7 +109,7 @@ def train_model(
     best_val_mae = float('inf')
     best_val_loss = float('inf')
     
-    # ==================== TRAINING LOOP ====================
+    # Training loop
     print("\n" + "="*60)
     print("Starting training...")
     print("="*60)
@@ -156,12 +123,12 @@ def train_model(
         
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]", leave=False)
         
-        for data, labels in train_pbar:
-            data = data.to(device)
+        for frames, labels in train_pbar:
+            frames = frames.to(device)
             labels = labels.float().to(device).unsqueeze(1)
             
             optimizer.zero_grad()
-            outputs, _ = model(data)
+            outputs, _ = model(frames)  # Single sweep training
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -170,14 +137,14 @@ def train_model(
             mae = torch.mean(torch.abs(outputs - labels)).item()
             
             # Update metrics
-            batch_size_actual = data.size(0)
+            batch_size_actual = frames.size(0)
             train_loss += loss.item() * batch_size_actual
             train_mae_epoch += mae * batch_size_actual
             
             # TensorBoard logging
-            writer.add_scalar(f"Train/{architecture}_{model_type}/Batch_Loss", loss.item(), global_step)
-            writer.add_scalar(f"Train/{architecture}_{model_type}/Batch_MAE", mae, global_step)
-            writer.add_scalar(f"Train/{architecture}_{model_type}/Learning_Rate", optimizer.param_groups[0]['lr'], global_step)
+            writer.add_scalar(f"Train/{model_type}/Batch_Loss", loss.item(), global_step)
+            writer.add_scalar(f"Train/{model_type}/Batch_MAE", mae, global_step)
+            writer.add_scalar(f"Train/{model_type}/Learning_Rate", optimizer.param_groups[0]['lr'], global_step)
             global_step += 1
             
             train_pbar.set_postfix({
@@ -202,16 +169,11 @@ def train_model(
                 sweeps = sweeps.to(device)
                 labels = labels.float().to(device).unsqueeze(1)
                 
-                # Handle validation input based on architecture
-                if architecture == 'flat':
-                    # Flat models: flatten sweeps
-                    B, S, T, C, H, W = sweeps.shape
-                    data = sweeps.view(B, S * T, C, H, W)
-                else:
-                    # Hierarchical models: keep as (B, S, T, C, H, W)
-                    data = sweeps
+                # For validation: flatten sweeps (S sweeps × T frames)
+                B, S, T, C, H, W = sweeps.shape
+                sweeps_flat = sweeps.view(B, S * T, C, H, W)
                 
-                outputs, _ = model(data)
+                outputs, _ = model(sweeps_flat)  # Multi-sweep validation
                 loss = criterion(outputs, labels)
                 mae = torch.mean(torch.abs(outputs - labels)).item()
                 
@@ -238,10 +200,10 @@ def train_model(
         print(f"  Learning Rate: {optimizer.param_groups[0]['lr']:.2e}")
         
         # TensorBoard epoch logging
-        writer.add_scalar(f"Train/{architecture}_{model_type}/Epoch_Loss", train_loss, epoch)
-        writer.add_scalar(f"Train/{architecture}_{model_type}/Epoch_MAE", train_mae_epoch, epoch)
-        writer.add_scalar(f"Val/{architecture}_{model_type}/Epoch_Loss", val_loss, epoch)
-        writer.add_scalar(f"Val/{architecture}_{model_type}/Epoch_MAE", val_mae_epoch, epoch)
+        writer.add_scalar(f"Train/{model_type}/Epoch_Loss", train_loss, epoch)
+        writer.add_scalar(f"Train/{model_type}/Epoch_MAE", train_mae_epoch, epoch)
+        writer.add_scalar(f"Val/{model_type}/Epoch_Loss", val_loss, epoch)
+        writer.add_scalar(f"Val/{model_type}/Epoch_MAE", val_mae_epoch, epoch)
         
         # Save best model
         if val_mae_epoch < best_val_mae:
@@ -249,7 +211,7 @@ def train_model(
             best_val_loss = val_loss
             
             # Save model checkpoint
-            checkpoint_path = os.path.join(save_dir, f"best_model_{architecture}_{model_type}.pth")
+            checkpoint_path = os.path.join(save_dir, f"best_model_{model_type}.pth")
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
@@ -260,11 +222,8 @@ def train_model(
                 'train_loss': train_loss,
                 'train_mae': train_mae_epoch,
                 'model_type': model_type,
-                'architecture': architecture,
                 'model_config': {
                     'reduced_dim': reduced_dim,
-                    'num_heads': num_heads if architecture == 'hierarchical' else None,
-                    'train_sweeps': train_sweeps,
                     'fine_tune_backbone': fine_tune_backbone,
                     'pretrained': pretrained
                 }
@@ -281,7 +240,7 @@ def train_model(
     print("="*60)
     print(f"Best validation MAE: {best_val_mae:.4f}")
     print(f"Best validation Loss: {best_val_loss:.4f}")
-    print(f"Model saved to: {os.path.join(save_dir, f'best_model_{architecture}_{model_type}.pth')}")
+    print(f"Model saved to: {os.path.join(save_dir, f'best_model_{model_type}.pth')}")
     print(f"TensorBoard logs: {log_dir}")
     
     return best_val_mae, best_val_loss
@@ -294,9 +253,6 @@ def main():
     parser.add_argument('--model', type=str, default='resnet18',
                         choices=['resnet18', 'resnet50', 'convnext_tiny'],
                         help='Model backbone to use')
-    parser.add_argument('--architecture', type=str, default='flat',
-                        choices=['flat', 'hierarchical'],
-                        help='Model architecture: flat (original) or hierarchical (intra-sweep)')
     
     # Data paths
     parser.add_argument('--train_csv', type=str, 
@@ -315,10 +271,6 @@ def main():
                         help='Learning rate')
     parser.add_argument('--reduced_dim', type=int, default=128,
                         help='Dimension for attention reduced features')
-    parser.add_argument('--num_heads', type=int, default=4,
-                        help='Number of attention heads (for hierarchical models)')
-    parser.add_argument('--train_sweeps', type=int, default=1,
-                        help='Number of sweeps per study during training (1 for flat, 2+ for hierarchical)')
     
     # Model configuration
     parser.add_argument('--no_fine_tune', action='store_false', dest='fine_tune_backbone',
@@ -336,15 +288,9 @@ def main():
     
     args = parser.parse_args()
     
-    # Validate arguments
-    if args.architecture == 'hierarchical' and args.train_sweeps < 2:
-        print("⚠️ Warning: Hierarchical models typically need 2+ sweeps for training")
-        print("  Consider setting --train_sweeps 2")
-    
     # Train the model
     train_model(
         model_type=args.model,
-        architecture=args.architecture,
         train_csv=args.train_csv,
         val_csv=args.val_csv,
         epochs=args.epochs,
@@ -352,8 +298,6 @@ def main():
         n_sweeps_val=args.n_sweeps_val,
         learning_rate=args.lr,
         reduced_dim=args.reduced_dim,
-        num_heads=args.num_heads,
-        train_sweeps=args.train_sweeps,
         fine_tune_backbone=args.fine_tune_backbone,
         pretrained=args.pretrained,
         save_dir=args.save_dir

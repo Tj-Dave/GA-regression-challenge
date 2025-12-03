@@ -1,0 +1,292 @@
+Using device: cuda
+Training convnext_tiny model...
+Loading datasets...
+Train samples: 395
+Val samples: 50
+Train batches: 50
+Val batches: 7
+Creating convnext_tiny model...
+Total parameters: 28,163,554
+Trainable parameters: 28,163,554
+
+============================================================
+Starting training...
+============================================================
+Epoch 1/50 [Train]:   0%|          | 0/50 [00:00<?, ?it/s]                                                                                                             
+Epoch 1/50:
+  Train Loss: 135.5261 | Train MAE: 135.5261
+  Val Loss:   88.0636 | Val MAE:   88.0636
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 88.0636) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                             
+Epoch 2/50:
+  Train Loss: 61.3445 | Train MAE: 61.3445
+  Val Loss:   61.2590 | Val MAE:   61.2590
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 61.2590) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                           
+Epoch 3/50:
+  Train Loss: 59.2936 | Train MAE: 59.2936
+  Val Loss:   60.1186 | Val MAE:   60.1186
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 60.1186) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                           
+Epoch 4/50:
+  Train Loss: 58.9489 | Train MAE: 58.9489
+  Val Loss:   59.8759 | Val MAE:   59.8759
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 59.8759) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                           
+Epoch 5/50:
+  Train Loss: 56.1560 | Train MAE: 56.1560
+  Val Loss:   56.0696 | Val MAE:   56.0696
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 56.0696) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                           
+Epoch 6/50:
+  Train Loss: 54.2231 | Train MAE: 54.2231
+  Val Loss:   45.2175 | Val MAE:   45.2175
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 45.2175) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                           
+Epoch 7/50:
+  Train Loss: 44.4161 | Train MAE: 44.4161
+  Val Loss:   46.8333 | Val MAE:   46.8333
+  Learning Rate: 3.00e-05
+                                                                                                           
+Epoch 8/50:
+  Train Loss: 42.3565 | Train MAE: 42.3565
+  Val Loss:   36.7439 | Val MAE:   36.7439
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 36.7439) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                           
+Epoch 9/50:
+  Train Loss: 42.6603 | Train MAE: 42.6603
+  Val Loss:   44.8152 | Val MAE:   44.8152
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 10/50:
+  Train Loss: 37.7264 | Train MAE: 37.7264
+  Val Loss:   37.6705 | Val MAE:   37.6705
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 11/50:
+  Train Loss: 40.9280 | Train MAE: 40.9280
+  Val Loss:   29.5591 | Val MAE:   29.5591
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 29.5591) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 12/50:
+  Train Loss: 35.6425 | Train MAE: 35.6425
+  Val Loss:   33.7142 | Val MAE:   33.7142
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 13/50:
+  Train Loss: 33.0171 | Train MAE: 33.0171
+  Val Loss:   28.4678 | Val MAE:   28.4678
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 28.4678) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 14/50:
+  Train Loss: 32.7141 | Train MAE: 32.7141
+  Val Loss:   24.3697 | Val MAE:   24.3697
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 24.3697) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 15/50:
+  Train Loss: 31.4769 | Train MAE: 31.4769
+  Val Loss:   23.7033 | Val MAE:   23.7033
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 23.7033) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 16/50:
+  Train Loss: 31.2685 | Train MAE: 31.2685
+  Val Loss:   27.3452 | Val MAE:   27.3452
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 17/50:
+  Train Loss: 30.7735 | Train MAE: 30.7735
+  Val Loss:   20.4573 | Val MAE:   20.4573
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 20.4573) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 18/50:
+  Train Loss: 30.0953 | Train MAE: 30.0953
+  Val Loss:   20.0829 | Val MAE:   20.0829
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 20.0829) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 19/50:
+  Train Loss: 24.9213 | Train MAE: 24.9213
+  Val Loss:   19.5396 | Val MAE:   19.5396
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 19.5396) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 20/50:
+  Train Loss: 26.9912 | Train MAE: 26.9912
+  Val Loss:   17.5162 | Val MAE:   17.5162
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 17.5162) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 21/50:
+  Train Loss: 23.8124 | Train MAE: 23.8124
+  Val Loss:   19.1796 | Val MAE:   19.1796
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 22/50:
+  Train Loss: 24.8534 | Train MAE: 24.8534
+  Val Loss:   15.3467 | Val MAE:   15.3467
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 15.3467) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 23/50:
+  Train Loss: 25.2957 | Train MAE: 25.2957
+  Val Loss:   23.7852 | Val MAE:   23.7852
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 24/50:
+  Train Loss: 25.2128 | Train MAE: 25.2128
+  Val Loss:   14.5306 | Val MAE:   14.5306
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 14.5306) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 25/50:
+  Train Loss: 22.0268 | Train MAE: 22.0268
+  Val Loss:   19.3443 | Val MAE:   19.3443
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 26/50:
+  Train Loss: 22.8511 | Train MAE: 22.8511
+  Val Loss:   26.0314 | Val MAE:   26.0314
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 27/50:
+  Train Loss: 21.6601 | Train MAE: 21.6601
+  Val Loss:   23.4347 | Val MAE:   23.4347
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 28/50:
+  Train Loss: 23.9652 | Train MAE: 23.9652
+  Val Loss:   19.9528 | Val MAE:   19.9528
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 29/50:
+  Train Loss: 21.3519 | Train MAE: 21.3519
+  Val Loss:   19.7078 | Val MAE:   19.7078
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 30/50:
+  Train Loss: 21.0121 | Train MAE: 21.0121
+  Val Loss:   14.7948 | Val MAE:   14.7948
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 31/50:
+  Train Loss: 20.9642 | Train MAE: 20.9642
+  Val Loss:   17.0534 | Val MAE:   17.0534
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 32/50:
+  Train Loss: 21.2784 | Train MAE: 21.2784
+  Val Loss:   14.4014 | Val MAE:   14.4014
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 14.4014) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 33/50:
+  Train Loss: 19.9923 | Train MAE: 19.9923
+  Val Loss:   14.7019 | Val MAE:   14.7019
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 34/50:
+  Train Loss: 21.4442 | Train MAE: 21.4442
+  Val Loss:   25.7196 | Val MAE:   25.7196
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 35/50:
+  Train Loss: 20.2975 | Train MAE: 20.2975
+  Val Loss:   16.7114 | Val MAE:   16.7114
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 36/50:
+  Train Loss: 19.4757 | Train MAE: 19.4757
+  Val Loss:   15.0633 | Val MAE:   15.0633
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 37/50:
+  Train Loss: 19.6420 | Train MAE: 19.6420
+  Val Loss:   18.8132 | Val MAE:   18.8132
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 38/50:
+  Train Loss: 18.6656 | Train MAE: 18.6656
+  Val Loss:   19.3250 | Val MAE:   19.3250
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 39/50:
+  Train Loss: 17.4966 | Train MAE: 17.4966
+  Val Loss:   16.8682 | Val MAE:   16.8682
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 40/50:
+  Train Loss: 18.6243 | Train MAE: 18.6243
+  Val Loss:   14.4922 | Val MAE:   14.4922
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 41/50:
+  Train Loss: 16.2771 | Train MAE: 16.2771
+  Val Loss:   12.8877 | Val MAE:   12.8877
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 12.8877) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 42/50:
+  Train Loss: 17.3180 | Train MAE: 17.3180
+  Val Loss:   16.8382 | Val MAE:   16.8382
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 43/50:
+  Train Loss: 17.3098 | Train MAE: 17.3098
+  Val Loss:   12.8596 | Val MAE:   12.8596
+  Learning Rate: 3.00e-05
+✅ Saved new best model (Val MAE: 12.8596) to checkpoints/best_model_convnext_tiny.pth
+                                                                                                            
+Epoch 44/50:
+  Train Loss: 17.1487 | Train MAE: 17.1487
+  Val Loss:   15.0772 | Val MAE:   15.0772
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 45/50:
+  Train Loss: 16.5064 | Train MAE: 16.5064
+  Val Loss:   13.6001 | Val MAE:   13.6001
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 46/50:
+  Train Loss: 15.6548 | Train MAE: 15.6548
+  Val Loss:   13.2568 | Val MAE:   13.2568
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 47/50:
+  Train Loss: 15.5382 | Train MAE: 15.5382
+  Val Loss:   14.0511 | Val MAE:   14.0511
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 48/50:
+  Train Loss: 16.5298 | Train MAE: 16.5298
+  Val Loss:   18.3087 | Val MAE:   18.3087
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 49/50:
+  Train Loss: 15.6999 | Train MAE: 15.6999
+  Val Loss:   14.4872 | Val MAE:   14.4872
+  Learning Rate: 3.00e-05
+                                                                                                            
+Epoch 50/50:
+  Train Loss: 17.6630 | Train MAE: 17.6630
+  Val Loss:   12.8976 | Val MAE:   12.8976
+  Learning Rate: 3.00e-05
+
+============================================================
+Training completed!
+============================================================
+Best validation MAE: 12.8596
+Best validation Loss: 12.8596
+Model saved to: checkpoints/best_model_convnext_tiny.pth
+TensorBoard logs: logs/convnext_tiny_20251203_020225

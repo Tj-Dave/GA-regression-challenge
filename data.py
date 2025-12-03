@@ -69,10 +69,10 @@ def preprocess_frame(frame):
 # ------------------------------------------------
 class SweepDataset(Dataset):
     """
-    Training dataset that loads TWO random sweeps per sample.
+    Training dataset that loads One-TWO random sweeps per sample.
     Output shape: (S=2, T=16, C=3, 224, 224)
     """
-    def __init__(self, csv_path, n_sweeps=2, transform=None, load_nifti=True):
+    def __init__(self, csv_path, n_sweeps=1, transform=None, load_nifti=True):
         self.df = pd.read_csv(csv_path)
         self.transform = transform
         self.load_nifti = load_nifti

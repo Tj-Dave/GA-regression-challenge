@@ -5,8 +5,8 @@ from torch import nn
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 import os
-from data import SweepDataset, SweepEvalDataset, imagenet_transform
-from model import NEJMbaseline
+from data_old import SweepDataset, SweepEvalDataset, imagenet_transform
+from model_old import NEJMbaseline
 import warnings
 
 warnings.filterwarnings("ignore")

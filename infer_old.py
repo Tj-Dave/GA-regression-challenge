@@ -2,8 +2,8 @@ import torch
 import pandas as pd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from data import SweepEvalDataset, imagenet_transform
-from model import NEJMbaseline
+from data_old import SweepEvalDataset, imagenet_transform
+from model_old import NEJMbaseline
 
 def infer_test(test_csv, model_path='best_model.pth', n_sweeps_test=8, output_csv='test_predictions.csv'):
     """
@@ -51,7 +51,7 @@ def infer_test(test_csv, model_path='best_model.pth', n_sweeps_test=8, output_cs
 
 if __name__ == "__main__":
     infer_test(
-        test_csv='/mnt/Data/hackathon/final_test.csv',
+        test_csv='/mnt/Data/hackathon/final_test_split.csv',
         model_path="checkpoints/best_model.pth",
         n_sweeps_test=8,
         output_csv="outputs/test_predictions.csv"
